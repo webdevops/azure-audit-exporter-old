@@ -1,0 +1,17 @@
+package: azure-audit-exporter/src
+import:
+- package: github.com/Azure/azure-sdk-for-go
+  subpackages:
+  - profiles/latest/advisor/mgmt/advisor
+  - profiles/latest/resources/mgmt/resources
+  - profiles/latest/resources/mgmt/subscriptions
+  - profiles/preview/preview/security/mgmt/security
+- package: github.com/Azure/go-autorest
+  subpackages:
+  - autorest
+  - autorest/azure/auth
+- package: github.com/jessevdk/go-flags
+- package: github.com/prometheus/client_golang
+  subpackages:
+  - prometheus
+  - prometheus/promhttp

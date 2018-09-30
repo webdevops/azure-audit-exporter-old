@@ -1,20 +1,31 @@
 package main
 
 import (
-	"log"
-	"time"
-	"regexp"
 	"context"
-	"net/http"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"fmt"
 	"github.com/Azure/azure-sdk-for-go/profiles/latest/advisor/mgmt/advisor"
 	"github.com/Azure/azure-sdk-for-go/profiles/latest/resources/mgmt/resources"
 	"github.com/Azure/azure-sdk-for-go/profiles/latest/resources/mgmt/subscriptions"
 	"github.com/Azure/azure-sdk-for-go/profiles/preview/preview/security/mgmt/security"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"log"
+	"net/http"
+	"regexp"
+	"sync"
+	"time"
 )
 
 var (
+	prometheusSubscriptionInfo *prometheus.GaugeVec
+	prometheusResourceGroupInfo *prometheus.GaugeVec
+	prometheusSecuritycenterCompliance *prometheus.GaugeVec
+	prometheusAdvisorRecommendations *prometheus.GaugeVec
+	resourceGroupRegexp = regexp.MustCompile(`resourceGroups/(?P<resourceGroup>[^/]+)/?`)
+)
+
+// Create and setup metrics and collection
+func initMetrics() {
 	prometheusSubscriptionInfo = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "azureaudit_subscription_info",
@@ -47,21 +58,19 @@ var (
 		[]string{"subscriptionID", "category", "resourceType", "resourceName", "resourceGroup", "impact", "risk"},
 	)
 
-	resourceGroupRegexp = regexp.MustCompile(`resourceGroups/(?P<resourceGroup>[^/]+)/?`)
-)
-
-func initMetrics() {
 	prometheus.MustRegister(prometheusSubscriptionInfo)
 	prometheus.MustRegister(prometheusResourceGroupInfo)
 	prometheus.MustRegister(prometheusSecuritycenterCompliance)
 	prometheus.MustRegister(prometheusAdvisorRecommendations)
+}
 
+func startMetricsCollection() {
 	go func() {
 		for {
 			go func() {
 				probeCollect()
 			}()
-			time.Sleep(time.Duration(opts.ScrapeTime) * time.Second)
+			time.Sleep(opts.ScrapeTime)
 		}
 	}()
 }
@@ -72,115 +81,171 @@ func startHttpServer() {
 }
 
 func probeCollect() {
+	var wg sync.WaitGroup
 	context := context.Background()
 
-	prometheusSubscriptionInfo.Reset()
-	prometheusResourceGroupInfo.Reset()
-	prometheusSecuritycenterCompliance.Reset()
-	prometheusAdvisorRecommendations.Reset()
+	callbackChannel := make(chan func())
 
 	for _, subscription := range AzureSubscriptions {
-
-		//---------------------------------------
 		// Subscription
-		//---------------------------------------
+		wg.Add(1)
+		go func(subscriptionId string) {
+			defer wg.Done()
+			collectAzureSubscription(context, subscriptionId, callbackChannel)
+			Logger.Verbose("subscription[%v]: finished Azure Subscription collection", subscriptionId)
+		}(*subscription.SubscriptionID)
 
-		subscriptionClient := subscriptions.NewClient()
-		subscriptionClient.Authorizer = AzureAuthorizer
+		// ResourceGroups
+		wg.Add(1)
+		go func(subscriptionId string) {
+			defer wg.Done()
+			collectAzureResourceGroup(context, subscriptionId, callbackChannel)
+			Logger.Verbose("subscription[%v]: finished Azure ResourceGroups collection", subscriptionId)
+		}(*subscription.SubscriptionID)
 
-		sub, err := subscriptionClient.Get(context, *subscription.SubscriptionID)
-		if err != nil {
-			panic(err)
-		}
-
-		prometheusSubscriptionInfo.With(
-			prometheus.Labels{
-				"subscriptionID": *sub.SubscriptionID,
-				"subscriptionName": *sub.DisplayName,
-				"spendingLimit": string(sub.SubscriptionPolicies.SpendingLimit),
-				"quotaID": *sub.SubscriptionPolicies.QuotaID,
-				"locationPlacementID": *sub.SubscriptionPolicies.LocationPlacementID,
-			},
-		).Set(1)
-
-		//---------------------------------------
-		// ResourceGroup
-		//---------------------------------------
-
-
-		resourceGroupClient := resources.NewGroupsClient(*subscription.SubscriptionID)
-		resourceGroupClient.Authorizer = AzureAuthorizer
-
-		resourceGroupResult, err := resourceGroupClient.ListComplete(context, "", nil)
-		if err != nil {
-			panic(err)
+		// SecurityCompliance
+		for _, location := range opts.AzureLocation {
+			wg.Add(1)
+			go func(subscriptionId, location string) {
+				defer wg.Done()
+				collectAzureSecurityCompliance(context, subscriptionId, location, callbackChannel)
+				Logger.Verbose("subscription[%v]: finished Azure SecurityCompliance collection", subscriptionId)
+			}(*subscription.SubscriptionID, location)
 		}
 
 
-		for _, item := range *resourceGroupResult.Response().Value {
-			prometheusResourceGroupInfo.With(prometheus.Labels{
-				"subscriptionID": *sub.SubscriptionID,
-				"resourceGroup": *item.Name,
-				"location": *item.Location,
-			}).Set(1)
+		// AdvisorRecommendations
+		wg.Add(1)
+		go func(subscriptionId string) {
+			defer wg.Done()
+			collectAzureAdvisorRecommendations(context, subscriptionId, callbackChannel)
+			Logger.Verbose("subscription[%v]: finished Azure AdvisorRecommendations collection", subscriptionId)
+		}(*subscription.SubscriptionID)
+	}
+
+	// collect metrics (callbacks) and proceses them
+	go func() {
+		var callbackList []func()
+		for callback := range callbackChannel {
+			callbackList = append(callbackList, callback)
 		}
 
-		//---------------------------------------
-		// Security Complience
-		//---------------------------------------
-
-		complianceClient := security.NewCompliancesClient(*subscription.SubscriptionID, "westeurope")
-		complianceClient.Authorizer = AzureAuthorizer
-
-		complienceResult, err := complianceClient.Get(context, *subscription.ID, time.Now().Format("2006-01-02Z"))
-		if err != nil {
-			panic(err)
+		prometheusSubscriptionInfo.Reset()
+		prometheusResourceGroupInfo.Reset()
+		prometheusSecuritycenterCompliance.Reset()
+		prometheusAdvisorRecommendations.Reset()
+		for _, callback := range callbackList {
+			callback()
 		}
 
-		if complienceResult.AssessmentResult != nil {
-			for _, itm := range *complienceResult.AssessmentResult {
+		Logger.Messsage("run: finished")
+	}()
 
-				segmentType := ""
-				if itm.SegmentType != nil {
-					segmentType = *itm.SegmentType
-				}
+	// wait for all funcs
+	wg.Wait()
+	close(callbackChannel)
+}
 
-				prometheusSecuritycenterCompliance.With(prometheus.Labels{
-					"subscriptionID": *sub.SubscriptionID,
-					"assessmentType": segmentType,
-				}).Add(*itm.Percentage)
+// Collect Azure Subscription metrics
+func collectAzureSubscription(context context.Context, subscriptionId string, callback chan<- func()) {
+	subscriptionClient := subscriptions.NewClient()
+	subscriptionClient.Authorizer = AzureAuthorizer
+
+	sub, err := subscriptionClient.Get(context, subscriptionId)
+	if err != nil {
+		panic(err)
+	}
+
+	infoLabels := prometheus.Labels{
+		"subscriptionID": *sub.SubscriptionID,
+		"subscriptionName": *sub.DisplayName,
+		"spendingLimit": string(sub.SubscriptionPolicies.SpendingLimit),
+		"quotaID": *sub.SubscriptionPolicies.QuotaID,
+		"locationPlacementID": *sub.SubscriptionPolicies.LocationPlacementID,
+	}
+
+	callback <- func() {
+		prometheusSubscriptionInfo.With(infoLabels).Set(1)
+	}
+}
+
+// Collect Azure ResourceGroup metrics
+func collectAzureResourceGroup(context context.Context, subscriptionId string, callback chan<- func()) {
+	resourceGroupClient := resources.NewGroupsClient(subscriptionId)
+	resourceGroupClient.Authorizer = AzureAuthorizer
+
+	resourceGroupResult, err := resourceGroupClient.ListComplete(context, "", nil)
+	if err != nil {
+		panic(err)
+	}
+
+	for _, item := range *resourceGroupResult.Response().Value {
+		infoLabels := prometheus.Labels{
+			"subscriptionID": subscriptionId,
+			"resourceGroup": *item.Name,
+			"location": *item.Location,
+		}
+
+		callback <- func() {
+			prometheusResourceGroupInfo.With(infoLabels).Set(1)
+		}
+	}
+}
+
+func collectAzureSecurityCompliance(context context.Context, subscriptionId, location string, callback chan<- func()) {
+	subscriptionResourceId := fmt.Sprintf("/subscriptions/%v", subscriptionId)
+	complianceClient := security.NewCompliancesClient(subscriptionResourceId, location)
+	complianceClient.Authorizer = AzureAuthorizer
+
+	complienceResult, err := complianceClient.Get(context, subscriptionResourceId, time.Now().Format("2006-01-02Z"))
+	if err != nil {
+		ErrorLogger.Error(fmt.Sprintf("subscription[%v]", subscriptionId), err)
+		return
+	}
+
+	if complienceResult.AssessmentResult != nil {
+		for _, result := range *complienceResult.AssessmentResult {
+			segmentType := ""
+			if result.SegmentType != nil {
+				segmentType = *result.SegmentType
+			}
+
+			infoLabels := prometheus.Labels{
+				"subscriptionID": subscriptionId,
+				"assessmentType": segmentType,
+			}
+			infoValue := *result.Percentage
+
+			callback <- func() {
+				prometheusSecuritycenterCompliance.With(infoLabels).Add(infoValue)
 			}
 		}
+	}
+}
 
-		//---------------------------------------
-		// Advisor Recommendations
-		//---------------------------------------
+func collectAzureAdvisorRecommendations(context context.Context, subscriptionId string, callback chan<- func()) {
+	advisorRecommendationsClient := advisor.NewRecommendationsClient(subscriptionId)
+	advisorRecommendationsClient.Authorizer = AzureAuthorizer
 
-		advisorRecommendationsClient := advisor.NewRecommendationsClient(*subscription.SubscriptionID)
-		advisorRecommendationsClient.Authorizer = AzureAuthorizer
+	recommendationResult, err := advisorRecommendationsClient.ListComplete(context, "", nil, "")
+	if err != nil {
+		panic(err)
+	}
 
-		recommendationResult, err := advisorRecommendationsClient.ListComplete(context, "", nil, "")
-		if err != nil {
-			panic(err)
+	for _, item := range *recommendationResult.Response().Value {
+
+		infoLabels := prometheus.Labels{
+			"subscriptionID": subscriptionId,
+			"category":       string(item.RecommendationProperties.Category),
+			"resourceType":   *item.RecommendationProperties.ImpactedField,
+			"resourceName":   *item.RecommendationProperties.ImpactedValue,
+			"resourceGroup":  extractResourceGroupFromAzureId(*item.ID),
+			"impact":         string(item.Impact),
+			"risk":           string(item.Risk),
 		}
 
-		for _, item := range *recommendationResult.Response().Value {
-			resourceGroupName := ""
-			rgMatch := resourceGroupRegexp.FindStringSubmatch(*item.ID)
-			if len(rgMatch) > 0 {
-				resourceGroupName = rgMatch[1]
-			}
-
-			prometheusAdvisorRecommendations.With(prometheus.Labels{
-				"subscriptionID": *sub.SubscriptionID,
-				"category": string(item.RecommendationProperties.Category),
-				"resourceType": *item.RecommendationProperties.ImpactedField,
-				"resourceName": *item.RecommendationProperties.ImpactedValue,
-				"resourceGroup": resourceGroupName,
-				"impact": string(item.Impact),
-				"risk": string(item.Risk),
-			}).Add(1)
+		callback <- func() {
+			prometheusAdvisorRecommendations.With(infoLabels).Add(1)
 		}
-
 	}
 }

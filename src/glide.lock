@@ -1,8 +1,8 @@
 hash: 7b3a5fbfd9996c8705c5bef1164275a0ea7211d96ca573ce30b746b083aa5aae
-updated: 2018-09-02T23:50:16.186538+02:00
+updated: 2018-09-30T23:16:56.080675+02:00
 imports:
 - name: github.com/Azure/azure-sdk-for-go
-  version: 2935c0241c74bd8549b843978dd6fc1be6f48b4a
+  version: 6d20bdbae88c06c36d72eb512295417693bfdf4e
   subpackages:
   - profiles/latest/advisor/mgmt/advisor
   - profiles/latest/resources/mgmt/resources
@@ -14,7 +14,7 @@ imports:
   - services/resources/mgmt/2018-02-01/resources
   - version
 - name: github.com/Azure/go-autorest
-  version: a35eae345f69bbfbe3b8fa0b1d3fe98f8430b21a
+  version: 87f168d7649781e529653290e223c9c84b789c00
   subpackages:
   - autorest
   - autorest/adal
@@ -33,24 +33,21 @@ imports:
   version: 01aeca54ebda6e0fbfafd0a524d234159c05ec20
 - name: github.com/dimchansky/utfbom
   version: 5448fe645cb1964ba70ac8f9f2ffe975e61a536c
-- name: github.com/gogo/protobuf
-  version: c0656edd0d9eab7c66d1eb0c568f9039345796f7
-  subpackages:
-  - proto
 - name: github.com/golang/protobuf
   version: b4deda0973fb4c70b50d226b1af49f3da59f5265
   subpackages:
   - proto
 - name: github.com/jessevdk/go-flags
-  version: 1c38ed7ad0cc3d9e66649ac398c30e45f395c4eb
+  version: 7309ec74f752d05ce2c62b8fd5755c4a2e3913cb
 - name: github.com/matttproud/golang_protobuf_extensions
   version: c12348ce28de40eed0136aa2b644d0ee0650e56c
   subpackages:
   - pbutil
 - name: github.com/prometheus/client_golang
-  version: 676eaf6b948046fcd9dbbcf5cc9ff5077921aa81
+  version: daeaac0cfb9c64220f9bf35be463c47420b581b8
   subpackages:
   - prometheus
+  - prometheus/internal
   - prometheus/promhttp
 - name: github.com/prometheus/client_model
   version: 5c3871d89910bfb32f5fcab2aa4b9ec68e65a99f
@@ -63,7 +60,7 @@ imports:
   - internal/bitbucket.org/ww/goautoneg
   - model
 - name: github.com/prometheus/procfs
-  version: 05ee40e3a273f7245e8777337fc7b46e533a9a92
+  version: 418d78d0b9a7b7de3a6bbc8a23def624cc977bb2
   subpackages:
   - internal/util
   - nfs

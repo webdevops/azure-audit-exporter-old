@@ -8,11 +8,12 @@ import (
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"github.com/Azure/azure-sdk-for-go/profiles/latest/resources/mgmt/subscriptions"
-	)
+	"time"
+)
 
 const (
 	Author  = "webdevops.io"
-	Version = "0.1.0"
+	Version = "0.2.0"
 )
 
 var (
@@ -25,10 +26,16 @@ var (
 )
 
 var opts struct {
-	AzureSubscription []string ` long:"azure-subscription"  env:"AZURE_SUBSCRIPTION_ID"   env-delim:" " description:"Azure subscription ID"`
-	AzureLocation []string `     long:"azure-location"      env:"AZURE_LOCATION"          env-delim:" " description:"Azure locations" default:"westeurope" default:"northeurope"`
-	ScrapeTime  int    `         long:"scrape-time"         env:"SCRAPE_TIME"                           description:"Scrape time in seconds"        default:"120"`
-	ServerBind  string `         long:"bind"                env:"SERVER_BIND"                           description:"Server address"                default:":8080"`
+	// general settings
+	Verbose     []bool `         long:"verbose" short:"v"     env:"VERBOSE"                              description:"Verbose mode"`
+
+	// server settings
+	ServerBind  string `         long:"bind"                  env:"SERVER_BIND"                           description:"Server address"                                   default:":8080"`
+	ScrapeTime  time.Duration `  long:"scrape-time"           env:"SCRAPE_TIME"                           description:"Scrape time (time.duration)"                      default:"5m"`
+
+	// azure settings
+	AzureSubscription []string ` long:"azure-subscription"    env:"AZURE_SUBSCRIPTION_ID"   env-delim:" " description:"Azure subscription ID"`
+	AzureLocation []string `     long:"azure-location"        env:"AZURE_LOCATION"          env-delim:" " description:"Azure locations" default:"westeurope" default:"northeurope"`
 }
 
 func main() {
@@ -38,7 +45,10 @@ func main() {
 	Logger = CreateDaemonLogger(0)
 	ErrorLogger = CreateDaemonErrorLogger(0)
 
-	Logger.Messsage("Init Azure Audit exporter v%s", Version)
+	// set verbosity
+	Verbose = len(opts.Verbose) >= 1
+
+	Logger.Messsage("Init Azure Audit exporter v%s (written by %v)", Version, Author)
 
 	Logger.Messsage("Init Azure connection")
 	initAzureConnection()
@@ -46,6 +56,7 @@ func main() {
 	Logger.Messsage("Starting metrics collection")
 	Logger.Messsage("  scape time: %v", opts.ScrapeTime)
 	initMetrics()
+	startMetricsCollection()
 
 	Logger.Messsage("Starting http server on %s", opts.ServerBind)
 	startHttpServer()

@@ -18,15 +18,18 @@ Normally no configuration is needed but can be customized using environment vari
 | `AZURE_LOCATION`                  | `westeurope`, `northeurope` | Azure location for usage statitics                                |
 | `SCRAPE_TIME`                     | `5m`                        | Time (time.Duration) between Azure API collections                |
 | `SERVER_BIND`                     | `:8080`                     | IP/Port binding                                                   |
+| `COLLECT_SUBSCRIPTION`            | `false`                     | Collect `azureaudit_subscription_info` (if azure_resourcemanager_exporter is not used) |
+| `COLLECT_RESOURCEGROUP`           | `false`                     | Collect `azureaudit_resourcegroup_info` (if azure_resourcemanager_exporter is not used) |
 
 for Azure API authentication (using ENV vars) see https://github.com/Azure/azure-sdk-for-go#authentication
 
 Metrics
 -------
 
-| Metric                                  | Description                                                                           |
-|-----------------------------------------|---------------------------------------------------------------------------------------|
-| `azureaudit_subscription_info`          | Azure Subscription details (ID, name, ...)                                            |
-| `azureaudit_resourcegroup_info`         | Azure ResourceGroup details (subscriptionID, name, various tags ...)                  |
-| `azureaudit_securitycenter_compliance`  | Azure SecurityCenter compliance status                                                |
-| `azureaudit_advisor_recommendation`     | Azure Adisor recommendations (eg. security findings)                                  |
+| Metric                                  | Description                                                                               |
+|-----------------------------------------|-------------------------------------------------------------------------------------------|
+| `azurerm_subscription_info`             | Azure Subscription details (ID, name, ...; disabled by default)                           |
+| `azurerm_resourcegroup_info`            | Azure ResourceGroup details (subscriptionID, name, various tags ...; disabled by default) |
+| `azurerm_securitycenter_compliance`     | Azure SecurityCenter compliance status                                                    |
+| `azurerm_advisor_recommendation`        | Azure Adisor recommendations (eg. security findings)                                      |
+

@@ -28,7 +28,7 @@ var (
 func initMetrics() {
 	prometheusSubscriptionInfo = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "azureaudit_subscription_info",
+			Name: "azurerm_subscription_info",
 			Help: "Azure Audit Subscription info",
 		},
 		[]string{"subscriptionID", "subscriptionName", "spendingLimit", "quotaID", "locationPlacementID"},
@@ -36,7 +36,7 @@ func initMetrics() {
 
 	prometheusResourceGroupInfo = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "azureaudit_resourcegroup_info",
+			Name: "azurerm_resourcegroup_info",
 			Help: "Azure Audit ResourceGroup info",
 		},
 		[]string{"subscriptionID", "resourceGroup", "location"},
@@ -44,7 +44,7 @@ func initMetrics() {
 
 	prometheusSecuritycenterCompliance = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "azureaudit_securitycenter_compliance",
+			Name: "azurerm_securitycenter_compliance",
 			Help: "Azure Audit SecurityCenter compliance status",
 		},
 		[]string{"subscriptionID", "assessmentType"},
@@ -52,7 +52,7 @@ func initMetrics() {
 
 	prometheusAdvisorRecommendations = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "azureaudit_advisor_recommendation",
+			Name: "azurerm_advisor_recommendation",
 			Help: "Azure Audit Advisor recommendation",
 		},
 		[]string{"subscriptionID", "category", "resourceType", "resourceName", "resourceGroup", "impact", "risk"},
@@ -88,20 +88,24 @@ func probeCollect() {
 
 	for _, subscription := range AzureSubscriptions {
 		// Subscription
-		wg.Add(1)
-		go func(subscriptionId string) {
-			defer wg.Done()
-			collectAzureSubscription(context, subscriptionId, callbackChannel)
-			Logger.Verbose("subscription[%v]: finished Azure Subscription collection", subscriptionId)
-		}(*subscription.SubscriptionID)
+		if opts.CollectSubscription {
+			wg.Add(1)
+			go func(subscriptionId string) {
+				defer wg.Done()
+				collectAzureSubscription(context, subscriptionId, callbackChannel)
+				Logger.Verbose("subscription[%v]: finished Azure Subscription collection", subscriptionId)
+			}(*subscription.SubscriptionID)
+		}
 
 		// ResourceGroups
-		wg.Add(1)
-		go func(subscriptionId string) {
-			defer wg.Done()
-			collectAzureResourceGroup(context, subscriptionId, callbackChannel)
-			Logger.Verbose("subscription[%v]: finished Azure ResourceGroups collection", subscriptionId)
-		}(*subscription.SubscriptionID)
+		if opts.CollectResourceGroup {
+			wg.Add(1)
+			go func(subscriptionId string) {
+				defer wg.Done()
+				collectAzureResourceGroup(context, subscriptionId, callbackChannel)
+				Logger.Verbose("subscription[%v]: finished Azure ResourceGroups collection", subscriptionId)
+			}(*subscription.SubscriptionID)
+		}
 
 		// SecurityCompliance
 		for _, location := range opts.AzureLocation {
@@ -109,7 +113,7 @@ func probeCollect() {
 			go func(subscriptionId, location string) {
 				defer wg.Done()
 				collectAzureSecurityCompliance(context, subscriptionId, location, callbackChannel)
-				Logger.Verbose("subscription[%v]: finished Azure SecurityCompliance collection", subscriptionId)
+				Logger.Verbose("subscription[%v]: finished Azure SecurityCompliance collection (%v)", subscriptionId, location)
 			}(*subscription.SubscriptionID, location)
 		}
 

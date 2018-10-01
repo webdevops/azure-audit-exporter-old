@@ -13,7 +13,7 @@ import (
 
 const (
 	Author  = "webdevops.io"
-	Version = "0.2.0"
+	Version = "0.3.0"
 )
 
 var (
@@ -27,16 +27,18 @@ var (
 
 var opts struct {
 	// general settings
-	Verbose     []bool `         long:"verbose" short:"v"     env:"VERBOSE"                              description:"Verbose mode"`
+	Verbose     []bool `         long:"verbose" short:"v"      env:"VERBOSE"                              description:"Verbose mode"`
 
 	// server settings
-	ServerBind  string `         long:"bind"                  env:"SERVER_BIND"                           description:"Server address"                                   default:":8080"`
-	ScrapeTime  time.Duration `  long:"scrape-time"           env:"SCRAPE_TIME"                           description:"Scrape time (time.duration)"                      default:"5m"`
+	ServerBind  string `         long:"bind"                   env:"SERVER_BIND"                           description:"Server address"                                   default:":8080"`
+	ScrapeTime  time.Duration `  long:"scrape-time"            env:"SCRAPE_TIME"                           description:"Scrape time (time.duration)"                      default:"5m"`
 
 	// azure settings
-	AzureSubscription []string ` long:"azure-subscription"    env:"AZURE_SUBSCRIPTION_ID"   env-delim:" " description:"Azure subscription ID"`
-	AzureLocation []string `     long:"azure-location"        env:"AZURE_LOCATION"          env-delim:" " description:"Azure locations" default:"westeurope" default:"northeurope"`
-}
+	AzureSubscription []string ` long:"azure-subscription"     env:"AZURE_SUBSCRIPTION_ID"   env-delim:" " description:"Azure subscription ID"`
+	AzureLocation []string `     long:"azure-location"         env:"AZURE_LOCATION"          env-delim:" " description:"Azure locations" default:"westeurope" default:"northeurope"`
+
+	CollectSubscription bool `   long:"collect-subscription"   env:"COLLECT_SUBSCRIPTION"                  description:"Collect subscription metrics (standalone if azure_resourcemanager_exporter is not used)"`
+	CollectResourceGroup bool `  long:"collect-resourcegroup"  env:"COLLECT_RESOURCEGROUP"                 description:"Collect resourcegroup metrics (standalone if azure_resourcemanager_exporter is not used)"`}
 
 func main() {
 	initArgparser()

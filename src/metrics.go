@@ -221,7 +221,7 @@ func collectAzureSecurityCompliance(context context.Context, subscriptionId, loc
 			infoValue := *result.Percentage
 
 			callback <- func() {
-				prometheusSecuritycenterCompliance.With(infoLabels).Add(infoValue)
+				prometheusSecuritycenterCompliance.With(infoLabels).Set(infoValue)
 			}
 		}
 	}
@@ -249,7 +249,7 @@ func collectAzureAdvisorRecommendations(context context.Context, subscriptionId 
 		}
 
 		callback <- func() {
-			prometheusAdvisorRecommendations.With(infoLabels).Add(1)
+			prometheusAdvisorRecommendations.With(infoLabels).Set(1)
 		}
 	}
 }
